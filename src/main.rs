@@ -167,6 +167,12 @@ impl<'a> Polygon<'a> {
     fn len(&self) -> usize {
         self.points.as_ref().len()
     }
+    fn align(&self, change: isize) -> Self {
+        Polygon {
+            orientation: (self.orientation as isize + change) as usize,
+            points: self.points.clone(),
+        }
+    }
     fn points(&self) -> PointIter {
         let (first, second) = self.points.as_ref().as_slice().split_at(self.orientation);
         PointIter {
@@ -204,7 +210,7 @@ impl<'a> Polygon<'a> {
 
         Polygon::new(Cow::Owned(buf))
     }
-    fn rotate(&self) -> Polygon {
+    fn reorient(&self) -> Polygon {
         let mut points = self.points();
         let p0 = points.next().unwrap();
         let p1 = points.next().unwrap();
