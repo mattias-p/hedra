@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 #[derive(Clone, Copy)]
 struct Vect {
     x: f64,
@@ -130,43 +132,97 @@ impl std::ops::Sub<Vect> for Point {
     }
 }
 
-struct Pentagon {
-    points: [Point; 5],
+struct PointIter<'a> {
+    first: &'a [Point],
+    second: &'a [Point],
 }
 
-impl Pentagon {
-    fn flip_rotate(&self) -> Pentagon {
-        let [p0, p1, p2, p3, p4] = self.points;
-        let p2_rot = p1 - (p2 - p0);
-        let p3_rot = p1 - (p3 - p0);
-        let p4_rot = p1 - (p4 - p0);
-        Pentagon {
-            points: [p0, p1, p2_rot, p3_rot, p4_rot],
+impl<'a> Iterator for PointIter<'a> {
+    type Item = Point;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some((point, rest)) = self.first.split_first() {
+            self.first = rest;
+            Some(*point)
+        } else if let Some((point, rest)) = self.second.split_first() {
+            self.second = rest;
+            Some(*point)
+        } else {
+            None
         }
     }
-    fn flip_reflect(&self) -> Pentagon {
-        let [p0, p1, p2, p3, p4] = self.points;
+}
+
+struct Polygon<'a> {
+    orientation: usize,
+    points: Cow<'a, Vec<Point>>,
+}
+
+impl<'a> Polygon<'a> {
+    fn new(points: Cow<'a, Vec<Point>>) -> Self {
+        Polygon {
+            orientation: 0,
+            points,
+        }
+    }
+    fn len(&self) -> usize {
+        self.points.as_ref().len()
+    }
+    fn points(&self) -> PointIter {
+        let (first, second) = self.points.as_ref().as_slice().split_at(self.orientation);
+        PointIter {
+            first, second
+        }
+    }
+    fn flip_rotate(&self) -> Polygon {
+        let mut points = self.points();
+        let p0 = points.next().unwrap();
+        let p1 = points.next().unwrap();
+
+        let mut buf = Vec::with_capacity(self.len());
+        buf.push(p0);
+        buf.push(p1);
+        for p in points {
+            buf.push(p1 - (p - p0));
+        }
+
+        Polygon::new(Cow::Owned(buf))
+    }
+    fn flip_reflect(&self) -> Polygon {
+        let mut points = self.points();
+        let p0 = points.next().unwrap();
+        let p1 = points.next().unwrap();
         let axis = p1 - p0;
-        let v2 = p2 - p0;
-        let v3 = p3 - p0;
-        let v4 = p4 - p0;
-        let p2_compl = p0 - 2.0 * (v2 - v2.onto(axis));
-        let p3_compl = p0 - 2.0 * (v3 - v3.onto(axis));
-        let p4_compl = p0 - 2.0 * (v4 - v4.onto(axis));
-        Pentagon {
-            points: [p0, p1, p2_compl, p3_compl, p4_compl],
+
+        let mut buf = Vec::with_capacity(self.len());
+        buf.push(p0);
+        buf.push(p1);
+        for p in points {
+            let v = p - p0;
+            let p_compl = p0 - 2.0 * (v - v.onto(axis));
+            buf.push(p_compl);
         }
+
+        Polygon::new(Cow::Owned(buf))
     }
-    fn rotate(&self) -> Pentagon {
-        let [p0, p1, p2, p3, p4] = self.points;
+    fn rotate(&self) -> Polygon {
+        let mut points = self.points();
+        let p0 = points.next().unwrap();
+        let p1 = points.next().unwrap();
+        let p2 = points.next().unwrap();
         let t1 = Matrix::translate(Point::default() - p1);
         let r = Matrix::rotate_scale((-(p1 - p0) * (p2 - p1)).unit());
         let t0 = Matrix::translate(p0 - Point::default());
         let t = t0 * r * t1;
         let t = &t;
-        Pentagon {
-            points: [t * p0, t * p1, t * p2, t * p3, t * p4],
+        let mut buf = Vec::with_capacity(self.len());
+        buf.push(t * p0);
+        buf.push(t * p1);
+        buf.push(t * p2);
+        for p in points {
+            buf.push(t * p);
         }
+
+        Polygon::new(Cow::Owned(buf))
     }
 }
 
